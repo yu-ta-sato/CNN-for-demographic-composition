@@ -1,0 +1,19 @@
+name: cnn-for-demographic-composition
+
+channels:
+  - conda-forge
+  - pytorch
+  - nvidia
+
+dependencies:
+  - contextily
+  - earthengine-api
+  - earthpy
+  - geopandas
+  - google-cloud-sdk
+  - matplotlib-scalebar
+  - python=3.9.16
+  - rioxarray
+  - pytorch::pytorch=2.1.0
+  - pytorch::torchvision
+  - pytorch::torchaudio
