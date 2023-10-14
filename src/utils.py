@@ -14,17 +14,18 @@ from datetime import date, datetime
 import pickle
 import gc
 
-#import requests
-#import json
-#import getpass
-#import re
-#import branca
-#import time
-#from sklearn.preprocessing import MinMaxScaler
-#import matplotlib.ticker as ticker
+# import requests
+# import json
+# import getpass
+# import re
+# import branca
+# import time
+# from sklearn.preprocessing import MinMaxScaler
+# import matplotlib.ticker as ticker
 
 import warnings
-warnings.filterwarnings('ignore')
+
+warnings.filterwarnings("ignore")
 
 # for geographic data
 import geopandas as gpd
@@ -35,8 +36,8 @@ import rioxarray
 import folium
 from folium.plugins import DualMap
 
-#from folium import Choropleth
-#from shapely.geometry import box
+# from folium import Choropleth
+# from shapely.geometry import box
 
 # for processing Landsat
 import earthpy as et
@@ -58,36 +59,41 @@ from torchvision import models
 from torch.utils.data import Dataset, DataLoader
 from torch.autograd import detect_anomaly
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-#import tempfile
+
+# import tempfile
+
 
 def seed_everything(seed: int):
     random.seed(seed)
-    os.environ['PYTHONHASHSEED'] = str(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = True
 
+
 def set_device():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     if device.type == "cpu":
         device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-    
+
     return device
 
-def crop_images(year: int,
-                mesh_num: int,
-                key_id: int,
-                gdf,
-                mesh_dir='../data/census/mesh',
-                land_dir='../data/Landsat',
-                ntl_dir ='../data/VIIRS/GeoTiff',
-                all_dir ='../data/all_combined',
-                size=224,
-                mode=None
-               ):
+
+def crop_images(
+    year: int,
+    mesh_num: int,
+    key_id: int,
+    gdf,
+    mesh_dir="../data/census/mesh",
+    land_dir="../data/Landsat",
+    ntl_dir="../data/VIIRS/GeoTiff",
+    all_dir="../data/all_combined",
+    size=224,
+    mode=None,
+):
     """
     A function of cropping images with the extent of mesh.
 
@@ -109,72 +115,97 @@ def crop_images(year: int,
 
     # obtain the geometry of mesh cell
     try:
-        key_code = gdf.iloc[key_id]['KEY_CODE']
+        key_code = gdf.iloc[key_id]["KEY_CODE"]
         geom = [gdf.geometry[key_id]]
     except:
-        key_code = gdf['KEY_CODE']
+        key_code = gdf["KEY_CODE"]
         geom = [gdf.geometry]
 
     # create 'tmp' directory if it does not exist
-    if not os.path.exists(os.path.join(all_dir, 'tmp')):
-        os.mkdir(os.path.join(all_dir, 'tmp'))
+    if not os.path.exists(os.path.join(all_dir, "tmp")):
+        os.mkdir(os.path.join(all_dir, "tmp"))
 
     # crop Landsat-8 (Daytime image)
-    with rasterio.open(os.path.join(land_dir, str(year), str(mesh_num)+'.tif')) as img_lands:
+    with rasterio.open(
+        os.path.join(land_dir, str(year), str(mesh_num) + ".tif")
+    ) as img_lands:
         lands_cropped, lands_transf = mask(img_lands, geom, crop=True, all_touched=True)
         lands_meta = img_lands.meta
 
     # update the metadata
-    lands_meta.update({"driver": "GTiff",
-                       "height": lands_cropped.shape[1],
-                       "width": lands_cropped.shape[2],
-                       "transform": lands_transf})
+    lands_meta.update(
+        {
+            "driver": "GTiff",
+            "height": lands_cropped.shape[1],
+            "width": lands_cropped.shape[2],
+            "transform": lands_transf,
+        }
+    )
 
     # store the cropped Landsat-8/OLI
-    with rasterio.open(os.path.join(all_dir, 'tmp', str(key_code) + '_landsat.tif'), "w", **lands_meta) as dest:
+    with rasterio.open(
+        os.path.join(all_dir, "tmp", str(key_code) + "_landsat.tif"), "w", **lands_meta
+    ) as dest:
         dest.write(lands_cropped)
 
     # crop Suomi NPP/VIIRS-DNS
-    with rasterio.open(os.path.join(ntl_dir, 'processed', str(year), str(year)+'.tif')) as img_viirs:
+    with rasterio.open(
+        os.path.join(ntl_dir, "processed", str(year), str(year) + ".tif")
+    ) as img_viirs:
         viirs_cropped, viirs_transf = mask(img_viirs, geom, crop=True, all_touched=True)
         viirs_meta = img_viirs.meta
 
     # update the metadata
-    viirs_meta.update({"driver": "GTiff",
-                       "height": viirs_cropped.shape[1],
-                       "width": viirs_cropped.shape[2],
-                       "transform": viirs_transf})
+    viirs_meta.update(
+        {
+            "driver": "GTiff",
+            "height": viirs_cropped.shape[1],
+            "width": viirs_cropped.shape[2],
+            "transform": viirs_transf,
+        }
+    )
 
     # store the cropped Suomi NPP/VIIRS-DNS
-    with rasterio.open(os.path.join(all_dir, 'tmp', str(key_code) + '_viirs.tif'), "w", **viirs_meta) as dest:
+    with rasterio.open(
+        os.path.join(all_dir, "tmp", str(key_code) + "_viirs.tif"), "w", **viirs_meta
+    ) as dest:
         dest.write(viirs_cropped)
 
     # open the cropped GeoTIFF files
-    xds_lands = rioxarray.open_rasterio(os.path.join(all_dir, 'tmp', str(key_code) + '_landsat.tif'))
-    xds_viirs = rioxarray.open_rasterio(os.path.join(all_dir, 'tmp', str(key_code) + '_viirs.tif'))
+    xds_lands = rioxarray.open_rasterio(
+        os.path.join(all_dir, "tmp", str(key_code) + "_landsat.tif")
+    )
+    xds_viirs = rioxarray.open_rasterio(
+        os.path.join(all_dir, "tmp", str(key_code) + "_viirs.tif")
+    )
 
     # reproject the Suomi NPP/VIIRS-DNS to Landsat-8/OLI for adjusting resolution
     xds_viirs = xds_viirs.rio.reproject_match(xds_lands)
 
     # resize pixels
-    xds_viirs = xds_viirs.rio.reproject('EPSG:4326', shape=(size,size))
-    xds_lands = xds_lands.rio.reproject('EPSG:4326', shape=(size,size))
+    xds_viirs = xds_viirs.rio.reproject("EPSG:4326", shape=(size, size))
+    xds_lands = xds_lands.rio.reproject("EPSG:4326", shape=(size, size))
 
-    if mode == 'save':
+    if mode == "save":
         # save the reprojected VIIRS into GeoTIFF file
-        xds_lands.rio.to_raster(os.path.join(all_dir, 'tmp', str(key_code) + '_landsat.tif'))
-        xds_viirs.rio.to_raster(os.path.join(all_dir, 'tmp', str(key_code) + '_viirs.tif'))
+        xds_lands.rio.to_raster(
+            os.path.join(all_dir, "tmp", str(key_code) + "_landsat.tif")
+        )
+        xds_viirs.rio.to_raster(
+            os.path.join(all_dir, "tmp", str(key_code) + "_viirs.tif")
+        )
 
-    elif mode == 'return':
+    elif mode == "return":
         # stack the layers into a single np.ndarray object
         stacked_layers = np.vstack([xds_lands.values, xds_viirs.values])
 
         # delete tmp files
-        os.remove(os.path.join(all_dir, 'tmp', str(key_code) + '_landsat.tif'))
-        os.remove(os.path.join(all_dir, 'tmp', str(key_code) + '_viirs.tif'))
+        os.remove(os.path.join(all_dir, "tmp", str(key_code) + "_landsat.tif"))
+        os.remove(os.path.join(all_dir, "tmp", str(key_code) + "_viirs.tif"))
 
         return stacked_layers
-    
+
+
 def append_index_layers(image: np.ndarray):
     """
     A function of appending layers of three indices (NDWI, NDBI, NDVI).
@@ -190,10 +221,10 @@ def append_index_layers(image: np.ndarray):
     assert image.shape[0] == 8
 
     # store relevant bands
-    band_3 = image[2,:,:]
-    band_4 = image[3,:,:]
-    band_5 = image[4,:,:]
-    band_6 = image[5,:,:]
+    band_3 = image[2, :, :]
+    band_4 = image[3, :, :]
+    band_5 = image[4, :, :]
+    band_6 = image[5, :, :]
 
     # calculate indices
     NDBI = (band_6 - band_5) / (band_6 + band_5)
@@ -201,12 +232,13 @@ def append_index_layers(image: np.ndarray):
     NDWI = (band_3 - band_5) / (band_3 + band_5)
 
     # stack index layers
-    index_layers = np.stack([NDBI,NDVI,NDWI],axis=0)
+    index_layers = np.stack([NDBI, NDVI, NDWI], axis=0)
 
     # append index layers to the original image
-    image = np.vstack([image,index_layers])
+    image = np.vstack([image, index_layers])
 
     return image
+
 
 def visualise_img(features, labels, figsize=10, fig_num=1):
     """
@@ -222,45 +254,43 @@ def visualise_img(features, labels, figsize=10, fig_num=1):
     """
 
     fig, axes = plt.subplots(fig_num, 5, figsize=(figsize, figsize))
-    plt.rcParams.update({'font.size': 9})
+    plt.rcParams.update({"font.size": 9})
 
     for i, ax in enumerate(axes):
-
         image = features[i]
         label = labels[i]
 
         # convert tensor into numpy.ndarray
         if isinstance(image, torch.Tensor):
-            image = image.cpu().detach().numpy() 
+            image = image.cpu().detach().numpy()
 
         if isinstance(label, torch.Tensor):
             label = label.cpu().detach().numpy()
 
         # plot landsat with band 4, 3, 2 for RGB
         ep.plot_rgb(image, rgb=(3, 2, 1), stretch=True, ax=ax[0])
-        ax[0].set_title('RGB: Band 4, 3, 2')
+        ax[0].set_title("RGB: Band 4, 3, 2")
 
         # plot landsat with band 7, 6, 5 for RGB
         ep.plot_rgb(image, rgb=(6, 5, 4), stretch=True, ax=ax[1])
-        ax[1].set_title('RGB: Band 7, 6, 5')
+        ax[1].set_title("RGB: Band 7, 6, 5")
 
         # plot landsat with NDVI
         ep.plot_rgb(image, rgb=(-3, -2, -1), stretch=True, ax=ax[2])
-        ax[2].set_title('RGB: NDBI,NDVI,NDWI')
+        ax[2].set_title("RGB: NDBI,NDVI,NDWI")
         ax[2].set_xticks([])
         ax[2].set_yticks([])
 
         # plot VIIRS
-        ax[3].imshow(image[7,:,:], cmap='gray')
-        ax[3].set_title('NTL')
+        ax[3].imshow(image[7, :, :], cmap="gray")
+        ax[3].set_title("NTL")
         ax[3].set_xticks([])
         ax[3].set_yticks([])
 
         # plot label
-        ax[4].bar(x=['0-14', '15-64', '65-'], height=10**label)
-        ax[4].set_title('Population by ages')
-        ax[4].set_xticklabels(['Btw. 0-14', 'Btw. 15-64', 'Over 64'])
-        ax[4].set_yscale("log") 
-        ax[4].set_ylim(10**0,10**6)
-
+        ax[4].bar(x=["0-14", "15-64", "65-"], height=10**label)
+        ax[4].set_title("Population by ages")
+        ax[4].set_xticklabels(["Btw. 0-14", "Btw. 15-64", "Over 64"])
+        ax[4].set_yscale("log")
+        ax[4].set_ylim(10**0, 10**6)
     plt.show()
