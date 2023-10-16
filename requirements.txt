@@ -1,0 +1,16 @@
+# local package
+-e .
+
+# external requirements
+click
+contextily
+earthengine-api
+earthpy
+geopandas
+google-cloud-sdk
+matplotlib-scalebar
+python=3.9.16
+rioxarray
+pytorch=2.1.0
+torchvision
+torchaudio
