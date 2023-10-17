@@ -1,4 +1,5 @@
 from utils import *
+import glob
 
 
 def preprocess_viirs(
@@ -21,18 +22,17 @@ def preprocess_viirs(
     """
 
     # import VIIRS
-    img = rasterio.open(
-        os.path.join(ntl_dir, "original", str(year), str(year) + ".tif")
-    )
+    tif_path = glob.glob(os.path.join(ntl_dir, "original", str(year), "*.tif"))
+    img = rasterio.open(tif_path[0])
 
     # mask VIIRS with master_gdf
     output, transform = mask(img, master_gdf.geometry, crop=True, all_touched=True)
 
     # set negative value as zero
-    output = np.where(output < 0, 0, output)
+    # output = np.where(output < 0, 0, output)
 
     # take log
-    output = np.log(output + 1e-7)
+    # output = np.log(output + 1e-7)
 
     # get the metadata
     meta = img.meta
