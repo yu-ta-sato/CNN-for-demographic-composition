@@ -1,28 +1,16 @@
-# from utils import *
-
 import os
-import random
 import math
 import numpy as np
-import pandas as pd
-import geopandas as gpd
 import rasterio
 from rasterio.mask import mask
 import rioxarray
-import pickle
 
 # for torch
-import tempfile
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import r2_score
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.optim as optim
 from torchvision import models
-from torch.utils.data import Dataset, DataLoader
-from torch.autograd import detect_anomaly
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.utils.data import Dataset
 
 import warnings
 

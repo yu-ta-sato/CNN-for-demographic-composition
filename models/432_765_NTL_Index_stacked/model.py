@@ -296,3 +296,50 @@ class RemoteSensingCNN(nn.Module):
         x = F.relu(self.fc2(x))
 
         return x
+
+
+class RemoteSensingCNN(nn.Module):
+    """
+    A class of CNN model with transfer learning from ResNet50.
+    """
+
+    def __init__(self, out_dim, pretrained):
+        super(RemoteSensingCNN, self).__init__()
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.conv_input = nn.Conv2d(
+            in_channels=12,  # Changed input channels to 12
+            out_channels=64,
+            kernel_size=7,
+            stride=2,
+            padding=3,
+            bias=False,
+        )
+        self.bn_input = nn.BatchNorm2d(64)
+        self.conv_all = nn.Conv2d(
+            in_channels=64, out_channels=64, kernel_size=1, bias=False
+        )
+        self.resnet = models.resnet50(pretrained=pretrained).to(self.device)
+        self.fc2 = nn.Linear(1000, out_dim)
+        self.dropout = nn.Dropout(0.25)
+
+        self.conv_input.load_state_dict(self.resnet.conv1.state_dict())
+
+    def forward(self, x):
+        x = self.conv_input(x)
+        x = F.relu(self.bn_input(x))
+
+        x = self.resnet.bn1(x)
+        x = self.resnet.relu(x)
+        x = self.resnet.maxpool(x)
+        x = self.resnet.layer1(x)
+        x = self.resnet.layer2(x)
+        x = self.resnet.layer3(x)
+        x = self.resnet.layer4(x)
+        x = self.resnet.avgpool(x)
+        x = x.view(x.size(0), -1)
+        x = self.dropout(x)
+        x = F.relu(self.resnet.fc(x))
+        x = self.dropout(x)
+        x = F.relu(self.fc2(x))
+
+        return x
