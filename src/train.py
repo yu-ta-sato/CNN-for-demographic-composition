@@ -39,6 +39,7 @@ def train(
         with open(record_path, "rb") as f:
             record_dict = pickle.load(f)
         best_loss = min([v["valid_loss"] for v in record_dict.values()])
+        not_improving = record_dict[max(record_dict.keys())]["not_improving"]
         model.load_state_dict(
             torch.load(latest_path, map_location=torch.device(device))
         )
@@ -47,9 +48,13 @@ def train(
     else:
         record_dict = {}
         best_loss = np.inf
+        not_improving = 0
 
     # initialise a loss function object (MSE)
-    criterion = nn.MSELoss()
+    # criterion = nn.MSELoss()
+
+    # initialise a loss functio object (Huber loss)
+    criterion = nn.HuberLoss()
 
     # initialise an optimiser object (Adam)
     optimizer = optim.Adam(model.parameters(), lr=0.001)
@@ -57,8 +62,8 @@ def train(
     # set CPU or GPU
     model = model.to(device)
 
-    # initialise a variable for early stopping
-    not_improving = 0
+    # complie the model
+    # model = torch.compile(model)
 
     # iterate over epochs
     for epoch in range(epochs):
@@ -92,8 +97,10 @@ def train(
 
                 else:
                     # calculate RMSE of logged labels
-                    loss = torch.sqrt(criterion(label, output))
-                    print(loss)
+                    # loss = torch.sqrt(criterion(label, output))
+
+                    # calculate log cosh
+                    loss = criterion(label, output)
 
                     # execute back propagation
                     loss.backward()
@@ -117,20 +124,23 @@ def train(
 
         # initialise a list for validation loss
         valid_loss = []
-        # with torch.no_grad():
-        for i, (img, label) in enumerate(valid_loader):
-            with detect_anomaly(False):
-                # convert images and labels to either CPU tensor or GPU tensor
-                img, label = img.to(device), label.to(device)
+        with torch.no_grad():
+            for i, (img, label) in enumerate(valid_loader):
+                with detect_anomaly():
+                    # convert images and labels to either CPU tensor or GPU tensor
+                    img, label = img.to(device), label.to(device)
 
-                # execute forward propagation
-                output = model(img)
+                    # execute forward propagation
+                    output = model(img)
 
-                # calculate RMSE of logged labels
-                loss = torch.sqrt(criterion(label, output))
+                    # calculate RMSE of logged labels
+                    # loss = torch.sqrt(criterion(label, output))
 
-                # store the validation loss of this iteration
-                valid_loss.append(loss.item())
+                    # calculate Huber loss
+                    loss = criterion(label, output)
+
+                    # store the validation loss of this iteration
+                    valid_loss.append(loss.item())
 
         # calculate mean of the validation loss
         valid_loss = np.mean(valid_loss)
@@ -145,11 +155,17 @@ def train(
 
         # update the record dictionary
         record_dict.update(
-            {epoch: {"train_loss": train_loss, "valid_loss": valid_loss}}
+            {
+                epoch: {
+                    "train_loss": train_loss,
+                    "valid_loss": valid_loss,
+                    "not_improving": not_improving,
+                }
+            }
         )
 
         print(
-            f"[epoch {epoch + 1}] train_loss: {train_loss:.3f}, valid_loss: {valid_loss:.3f}"
+            f"[epoch {epoch + 1}] train_loss: {train_loss:.3f}, valid_loss: {valid_loss:.3f}, not_improving: {not_improving}"
         )
 
         # save record_dict as pickle
