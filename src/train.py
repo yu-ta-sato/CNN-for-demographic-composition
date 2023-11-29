@@ -1,4 +1,71 @@
-from utils import *
+import os
+import gc
+import pickle
+
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
+
+# class CombinedHuberLoss(nn.Module):
+#     def __init__(self):
+#         super().__init__()
+
+#     def forward(self, targets, outputs):
+#         targets_rate = torch.pow(10, targets) / torch.pow(10, targets).sum(
+#             axis=-1
+#         ).unsqueeze(1).repeat(1, 3)
+#         outputs_rate = torch.pow(10, outputs) / torch.pow(10, outputs).sum(
+#             axis=-1
+#         ).unsqueeze(1).repeat(1, 3)
+
+#         print(targets_rate)
+#         print(outputs_rate)
+
+#         loss = torch.nn.functional.huber_loss(
+#             targets,
+#             outputs,
+#             delta=np.linalg.norm(
+#                 [2.2558166510964104, 2.1064155571070384, 1.9195553125363525]
+#             ),
+#         )
+#         loss_rate = torch.nn.functional.huber_loss(
+#             targets_rate,
+#             outputs_rate,
+#             delta=np.linalg.norm([0.038376, 0.089343, 0.113496]),
+#         )
+
+#         # print(outputs_rate, targets_rate)
+#         print(loss, loss_rate)
+
+#         return loss + loss_rate
+
+
+class CombinedHuberLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, labels, outputs):
+        print(torch.exp(labels[:5]))
+        print(torch.exp(outputs[:5]))
+        print("###################")
+        print(nn.functional.softmax(labels[:5]))
+        print(nn.functional.softmax(outputs[:5]))
+
+        loss = nn.functional.huber_loss(
+            labels, outputs, delta=np.linalg.norm([1, 1, 1])
+        )  # 0.1)#1.0098063938698598)
+
+        loss_rate = nn.functional.kl_div(
+            nn.functional.log_softmax(outputs), nn.functional.softmax(labels)
+        )
+        # loss_rate = nn.functional.huber_loss(nn.functional.softmax(outputs_rate), targets_rate, delta=0.1)
+        # np.linalg.norm([2.2558166510964104, 2.1064155571070384, 1.9195553125363525]))
+
+        # print(outputs_rate, targets_rate)
+        print(loss, loss_rate)
+
+        return loss + loss_rate
 
 
 def train(
@@ -54,7 +121,8 @@ def train(
     # criterion = nn.MSELoss()
 
     # initialise a loss functio object (Huber loss)
-    criterion = nn.HuberLoss()
+    # criterion = nn.HuberLoss()
+    criterion = CombinedHuberLoss()
 
     # initialise an optimiser object (Adam)
     optimizer = optim.Adam(model.parameters(), lr=0.001)
@@ -81,35 +149,36 @@ def train(
         train_loss = []
 
         for i, (img, label) in enumerate(train_loader):
-            with detect_anomaly():
-                # convert images and labels to either CPU tensor or GPU tensor
-                img, label = img.to(device), label.to(device)
+            # with detect_anomaly():
+            # convert images and labels to either CPU tensor or GPU tensor
+            # img, label = img.to(device), label.to(device)
+            img, label = (img.to(device), label.to(device))
 
-                # clean up the gradient
-                optimizer.zero_grad()
+            # clean up the gradient
+            optimizer.zero_grad()
 
-                # execute forward propagation
-                output = model(img)
+            # execute forward propagation
+            output = model(img)
 
-                # if the output is NaN, skip back propagation
-                if torch.isnan(output).any():
-                    print(f"[epoch {epoch + 1},{i + 1:3d}] loss: skipped due to nan")
+            # if the output is NaN, skip back propagation
+            if torch.isnan(output).any():
+                print(f"[epoch {epoch + 1},{i + 1:3d}] loss: skipped due to nan")
 
-                else:
-                    # calculate RMSE of logged labels
-                    # loss = torch.sqrt(criterion(label, output))
+            else:
+                # calculate RMSE of logged labels
+                # loss = torch.sqrt(criterion(label, output))
 
-                    # calculate log cosh
-                    loss = criterion(label, output)
+                # calculate log cosh
+                loss = criterion(label, output)
 
-                    # execute back propagation
-                    loss.backward()
-                    optimizer.step()
+                # execute back propagation
+                loss.backward()
+                optimizer.step()
 
-                    # store the training loss of this iteration
-                    train_loss.append(loss.item())
+                # store the training loss of this iteration
+                train_loss.append(loss.item())
 
-                    print(f"[epoch {epoch + 1},{i + 1:3d}] loss: {loss.item():.3f}")
+                print(f"[epoch {epoch + 1},{i + 1:3d}] loss: {loss.item():.3f}")
 
         # calculate mean of the training loss
         train_loss = np.mean(train_loss)
@@ -126,21 +195,19 @@ def train(
         valid_loss = []
         with torch.no_grad():
             for i, (img, label) in enumerate(valid_loader):
-                with detect_anomaly():
-                    # convert images and labels to either CPU tensor or GPU tensor
-                    img, label = img.to(device), label.to(device)
+                # with detect_anomaly():
+                # convert images and labels to either CPU tensor or GPU tensor
+                # img, label = img.to(device), label.to(device)
+                img, label = (img.to(device), label.to(device))
 
-                    # execute forward propagation
-                    output = model(img)
+                # execute forward propagation
+                output = model(img)
 
-                    # calculate RMSE of logged labels
-                    # loss = torch.sqrt(criterion(label, output))
+                # calculate Huber loss & Cross Entropy loss
+                loss = criterion(label, output)
 
-                    # calculate Huber loss
-                    loss = criterion(label, output)
-
-                    # store the validation loss of this iteration
-                    valid_loss.append(loss.item())
+                # store the validation loss of this iteration
+                valid_loss.append(loss.item())
 
         # calculate mean of the validation loss
         valid_loss = np.mean(valid_loss)
